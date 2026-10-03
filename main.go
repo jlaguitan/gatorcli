@@ -22,6 +22,7 @@ func main() {
 	}
 
 	fmt.Println("test for push")
+	fmt.Println("test for user push")
 	fmt.Println(updatedCfg.DBUrl)
 	fmt.Println(updatedCfg.CurrentUserName)
 }
