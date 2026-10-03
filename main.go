@@ -20,7 +20,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	
+
+	fmt.Println("test for push")
 	fmt.Println(updatedCfg.DBUrl)
 	fmt.Println(updatedCfg.CurrentUserName)
 }
