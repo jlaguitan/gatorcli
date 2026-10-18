@@ -1,5 +1,6 @@
 package main
-
+//sudo sed -i 's/trust/peer/' /etc/postgresql/*/main/pg_hba.conf && sudo service postgresql restart
+//psql "postgres://postgres:postgres@localhost:5432/gator"
 import (
 	"errors"
 	"fmt"
