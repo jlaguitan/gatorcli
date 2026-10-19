@@ -1,13 +1,19 @@
 package main
 
 import (
-	"gatorcli/internal/config"
+	"database/sql"
 	"log"
 	"os"
+
+	"gatorcli/internal/config"
+	"gatorcli/internal/database"
+
+	_ "github.com/lib/pq"
 )
 
 // state will give handlers access to the application state
 type state struct {
+	db  *database.Queries
 	cfg *config.Config
 }
 
@@ -17,7 +23,15 @@ func main() {
 		log.Fatal(err)
 	}
 
+	db, err := sql.Open("postgres", cfg.DBUrl)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	dbQueries := database.New(db)
+
 	s := &state{
+		db:  dbQueries,
 		cfg: &cfg,
 	}
 
@@ -26,6 +40,7 @@ func main() {
 	}
 
 	cmds.register("login", handlerLogin)
+	cmds.register("register", handlerRegister)
 	userInput := os.Args
 
 	if len(userInput) < 2 {
