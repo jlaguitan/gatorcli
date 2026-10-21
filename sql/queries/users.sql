@@ -15,3 +15,8 @@ FROM
     users
 WHERE
     $1 = name;
+
+
+-- name: DeleteAllUsers :exec
+DELETE FROM
+    users;

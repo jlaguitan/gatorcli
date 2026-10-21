@@ -68,7 +68,7 @@ func handlerRegister(s *state, cmd command) error {
 		Name:      cmd.args[0],
 	})
 	if err != nil {
-		log.Print(err)
+		//log.Print(err)
 		log.Println("error: username already exists")
 		os.Exit(1)
 	}
@@ -79,5 +79,18 @@ func handlerRegister(s *state, cmd command) error {
 	}
 	fmt.Printf("User: %v has been successfully registered\n", user.Name)
 	log.Printf("%+v\n", user)
+	return nil
+}
+
+func handlerReset(s *state, cmd command) error {
+	if len(cmd.args) != 0 {
+		return errors.New("command usage: reset")
+	}
+	err := s.db.DeleteAllUsers(context.Background())
+	if err != nil {
+		//return errors.New("error: cannot delete all users")
+		return fmt.Errorf("error deleting user: %w", err)
+	}
+	fmt.Println("users has been successfully deleted")
 	return nil
 }
