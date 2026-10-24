@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"gatorcli/internal/database"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -113,29 +115,102 @@ func handlerUsers(s *state, cmd command) error {
 	return nil
 }
 
-const url = "https://www.wagslane.dev/index.xml"
-
-func handlerAgg(s *state, cmd command) error {
-	if len(cmd.args) != 0 {
-		return fmt.Errorf("command does not need an argument")
-	}
-
-	rssfeed, err := fetchFeed(context.Background(), url)
+func scrapeFeeds(s *state) error {
+	nextFeed, err := s.db.GetNextFeedToFetch(context.Background())
 	if err != nil {
-		return fmt.Errorf("error fetching rss data: %v", err)
+		return err
+	}
+	markedFeed, err := s.db.MarkFeedFetched(context.Background(), nextFeed.ID)
+	if err != nil {
+		return err
+	}
+	rssfeed, err := fetchFeed(context.Background(), markedFeed.Url)
+	if err != nil {
+		return err
 	}
 
-	fmt.Printf("%+v\n", rssfeed)
+	for _, item := range rssfeed.Channel.Item {
+		var publishedAt sql.NullTime
+		parsedTime, err := time.Parse(time.RFC1123, item.PubDate)
+		if err == nil {
+			publishedAt = sql.NullTime{
+				Time:  parsedTime,
+				Valid: true,
+			}
+		}
+		_, err = s.db.CreatePost(context.Background(), database.CreatePostParams{
+			ID:        uuid.New(),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+			Title:     item.Title,
+			Url:       item.Link,
+			Description: sql.NullString{
+				String: item.Description,
+				Valid:  true,
+			},
+			PublishedAt: publishedAt,
+			FeedID:      markedFeed.ID,
+		})
+
+		if err != nil {
+			log.Printf("error creating post: %v\n", err)
+			continue
+		}
+	}
 	return nil
 }
 
-func handlerAddfeed(s *state, cmd command) error {
-	if len(cmd.args) != 2 {
-		return fmt.Errorf("command needs two arguments, <name> <url>")
+func handlerAgg(s *state, cmd command) error {
+	if len(cmd.args) != 1 {
+		return fmt.Errorf("command needs one argument")
 	}
-	currentUser, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
+
+	time_between_reqs, err := time.ParseDuration(cmd.args[0])
 	if err != nil {
 		return err
+	}
+	fmt.Printf("Collecting feeds every %s\n", time_between_reqs)
+
+	ticker := time.NewTicker(time_between_reqs)
+	for ; ; <-ticker.C {
+		scrapeFeeds(s)
+	}
+
+}
+
+func handlerBrowse(s *state, cmd command, user database.User) error {
+	if len(cmd.args) > 1 {
+		return errors.New("command needs 1 or 0 arguments")
+	}
+
+	limit := 2
+	if len(cmd.args) != 0 {
+		var err error
+		limit, err = strconv.Atoi(cmd.args[0])
+		if err != nil {
+			return err
+		}
+	}
+
+	posts, err := s.db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+		UserID: user.ID,
+		Limit: int32(limit),
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, post := range posts {
+		fmt.Printf("Title: %v\n", post.Title)
+		fmt.Printf("URL: %v\n", post.Url)
+		fmt.Println()
+	}
+	return nil
+}
+
+func handlerAddfeed(s *state, cmd command, user database.User) error {
+	if len(cmd.args) != 2 {
+		return fmt.Errorf("command needs two arguments, <name> <url>")
 	}
 
 	name := cmd.args[0]
@@ -146,7 +221,7 @@ func handlerAddfeed(s *state, cmd command) error {
 		UpdatedAt: time.Now(),
 		Name:      name,
 		Url:       url,
-		UserID:    currentUser.ID,
+		UserID:    user.ID,
 	})
 	if err != nil {
 		return err
@@ -156,7 +231,7 @@ func handlerAddfeed(s *state, cmd command) error {
 		ID:        uuid.New(),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
-		UserID:    currentUser.ID,
+		UserID:    user.ID,
 		FeedID:    feed.ID,
 	})
 	if err != nil {
@@ -189,16 +264,12 @@ func handlerFeeds(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollow(s *state, cmd command) error {
+func handlerFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.args) != 1 {
 		return errors.New("commands need one argument")
 	}
 
 	url := cmd.args[0]
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return err
-	}
 
 	feed, err := s.db.GetFeedByURL(context.Background(), url)
 	if err != nil {
@@ -221,14 +292,9 @@ func handlerFollow(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollowing(s *state, cmd command) error {
+func handlerFollowing(s *state, cmd command, user database.User) error {
 	if len(cmd.args) != 0 {
 		return errors.New("command does not need an argument")
-	}
-
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return err
 	}
 
 	followFeeds, err := s.db.GetFeedFollowsForUser(context.Background(), user.ID)
@@ -240,6 +306,27 @@ func handlerFollowing(s *state, cmd command) error {
 	fmt.Printf("Following feed(s): \n")
 	for _, followFeed := range followFeeds {
 		fmt.Printf(" - %v\n", followFeed.FeedName)
+	}
+	return nil
+}
+
+func handlerUnfollow(s *state, cmd command, user database.User) error {
+	if len(cmd.args) != 1 {
+		return errors.New("command needs one argument")
+	}
+
+	url := cmd.args[0]
+	feed, err := s.db.GetFeedByURL(context.Background(), url)
+	if err != nil {
+		return err
+	}
+
+	err = s.db.DeleteFeedFollowForUser(context.Background(), database.DeleteFeedFollowForUserParams{
+		FeedID: feed.ID,
+		UserID: user.ID,
+	})
+	if err != nil {
+		return err
 	}
 	return nil
 }
