@@ -1,11 +1,5 @@
 package main
 
-//sudo sed -i 's/trust/peer/' /etc/postgresql/*/main/pg_hba.conf && sudo service postgresql restart
-//psql "postgres://postgres:postgres@localhost:5432/gator" //testing connection string
-//goose postgres '<connection_string>' up
-//sudo service postgresql start
-//sudo service postgresql status
-//psql -U postgres -d gator
 import (
 	"context"
 	"database/sql"
