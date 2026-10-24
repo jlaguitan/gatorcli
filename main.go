@@ -1,5 +1,11 @@
 package main
 
+//sudo sed -i 's/trust/peer/' /etc/postgresql/*/main/pg_hba.conf && sudo service postgresql restart
+//psql "postgres://postgres:postgres@localhost:5432/gator" //testing connection string
+//goose postgres '<connection_string>' up
+//sudo service postgresql start
+//sudo service postgresql status
+//psql -U postgres -d gator
 import (
 	"database/sql"
 	"log"
@@ -43,6 +49,11 @@ func main() {
 	cmds.register("register", handlerRegister)
 	cmds.register("reset", handlerReset)
 	cmds.register("users", handlerUsers)
+	cmds.register("agg", handlerAgg)
+	cmds.register("addfeed", handlerAddfeed)
+	cmds.register("feeds", handlerFeeds)
+	cmds.register("follow", handlerFollow)
+	cmds.register("following", handlerFollowing)
 	userInput := os.Args
 
 	if len(userInput) < 2 {
